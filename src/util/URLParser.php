@@ -25,10 +25,16 @@ class URLParser
 {
 
     /**
+     * Array com os argumentos passados pela URL logo após o nome do método
+     * @var array
+     */
+    private $args;
+
+    /**
      * String de referência ao controller desejado
      * @var string
      */
-    private $controller;
+    private $controllerName;
 
     /**
      *
@@ -40,13 +46,13 @@ class URLParser
      * String que referencia o método de controller desejado
      * @var string
      */
-    private $method;
+    private $methodName;
 
     /**
      * String que referencia o nome do módulo desejado
      * @var string
      */
-    private $module;
+    private $moduleName;
 
     /**
      * Valor que vem logo após o # na URL
@@ -58,6 +64,7 @@ class URLParser
      * Path do arquivo, a partir da raiz da aplicação,
      * que recebe todas as requisições
      * @var string
+     * @link http://en.wikipedia.org/wiki/Front_Controller_pattern
      */
     private $frontController;
 
@@ -74,10 +81,25 @@ class URLParser
     private $path;
 
     /**
+     * Pedaço do path relativo ao recurso da aplicação que está sendo 
+     * requisitado. Este pedaço vem depois de authority/host/port, do 
+     * subdiretório no qual a aplicação está instalada e do front controller.
+     * 
+     * Ex.: teremos o $resourcePath = "teste/usuario" quando a url for igual a:
+     * - http://localhost/intranet/public/index.php/teste/usuario
+     * - http://localhost/intranet/teste/usuario
+     * - http://localhost.intranet/public/index.php/teste/usuario
+     * - http://localhost.intranet/teste/usuario
+     * 
+     * @var string
+     */
+    private $resourcePath;
+
+    /**
      * Subdiretório no qual está instalada a aplicação
      * @var string
      */
-    private $subPath;
+    private $subDirectory;
 
     /**
      * Porta de acesso à aplicação
@@ -98,24 +120,72 @@ class URLParser
     private $scheme;
 
     /**
+     * URL usada para acessar a aplicação
+     * @var string
+     */
+    private $url;
+
+    /**
      * Nome de usuário informado na sessão "authority"
      * @var string
      */
     private $user;
 
-    function __construct($url)
+    function __construct($url = null)
     {
-        $this->frontController = 'public' . DIRECTORY_SEPARATOR . 'index.php';
+        $this->setUrl($url);
+        $this->setFrontController('public/index.php');
+        $this->setScheme();
+        $this->setHost();
+        $this->setPort();
+        $this->setUser();
+        $this->setPass();
+        $this->setQuery();
+        $this->setFragment();
+        $this->setPath();
+        $this->setSubDirectory();
+    }
 
-        $this->setScheme($url);
-        $this->setHost($url);
-        $this->setPort($url);
-        $this->setUser($url);
-        $this->setPass($url);
-        $this->setQuery($url);
-        $this->setFragment($url);
-        $this->setPath($url);
-        $this->setSubPath($url);
+    /**
+     * Obtém um array com os argumentos passados via URL logo após o nome do 
+     * método. 
+     * ATENCIÓN: isso NÃO é um array da query string! Para obtê-lo,
+     * utilize o método getQuery()
+     * @return array
+     */
+    public function getArgs()
+    {
+        if (empty($this->args) && !is_null($this->getResourcePath())) {
+            $resourcePath = !is_null($this->getMethodName()) ?
+                    mb_substr($this->getResourcePath(), mb_strpos($this->getResourcePath(), $this->getMethodName()) + mb_strlen($this->getMethodName()) + 1) :
+                    null;
+
+            if (!empty($resourcePath)) {
+                $filter = create_function('$a', 'return !empty($a);');
+                $this->args = array_filter(explode('/', $resourcePath), $filter);
+            }
+        }
+        return $this->args;
+    }
+
+    /**
+     * 
+     * @return string
+     */
+    public function getControllerName()
+    {
+        if (empty($this->controllerName) && !is_null($this->getResourcePath())) {
+            $resourcePath = is_null($this->getModuleName()) ?
+                    $this->getResourcePath() :
+                    mb_substr($this->getResourcePath(), mb_strlen($this->getModuleName()) + 1);
+
+            if (mb_strlen($resourcePath) > 0) {
+                $this->controllerName = mb_ereg_match('.*/', $resourcePath) ?
+                        mb_substr($resourcePath, 0, mb_strpos($resourcePath, '/')) :
+                        $resourcePath;
+            }
+        }
+        return $this->controllerName;
     }
 
     /**
@@ -123,9 +193,18 @@ class URLParser
      * após a # na URL
      * @return string
      */
-    function getFragment()
+    public function getFragment()
     {
         return $this->fragment;
+    }
+
+    /**
+     * Obtém o caminho para o front controller a partir da raiz da aplicação
+     * @return string
+     */
+    public function getFrontController()
+    {
+        return $this->frontController;
     }
 
     /**
@@ -138,10 +217,59 @@ class URLParser
     }
 
     /**
+     * Retorna o nome do método
+     * @return string
+     */
+    public function getMethodName()
+    {
+        if (empty($this->methodName) && !is_null($this->getResourcePath())) {
+            $resourcePath = is_null($this->getControllerName()) ?
+                    null :
+                    mb_substr($this->getResourcePath(), mb_strpos($this->getResourcePath(), $this->getControllerName()) + mb_strlen($this->getControllerName()) + 1);
+
+            $methodName = mb_ereg_match('.*/', $resourcePath) ?
+                    mb_substr($resourcePath, 0, mb_strpos($resourcePath, '/')) :
+                    $resourcePath;
+
+            $this->methodName = empty($methodName) ? null : $methodName;
+        }
+        return $this->methodName;
+    }
+
+    /**
+     * Retorna o nome do module requisitado via URL
+     * 
+     * Como o primeiro parâmetro passado via URL pode ser tanto um module
+     * quando um controller, eu verifico se este module existe na aplicação.
+     * Trazudindo: só retorno um módulo caso o mesmo exista!
+     * 
+     * @return string
+     */
+    public function getModuleName()
+    {
+        if (empty($this->moduleName) && !is_null($this->getResourcePath())) {
+            $moduleName = $this->getResourcePath();
+
+            /* Extrai a primeira parte do que sobrou */
+            if (mb_strlen($moduleName) > 0 && mb_ereg_match('.*/', $moduleName)) {
+                $moduleName = mb_substr($moduleName, 0, mb_strpos($moduleName, '/'));
+            }
+
+            /* Verifico se o módulo existe */
+            if (mb_strlen($moduleName) > 0) {
+                $dirInfo = new SplFileInfo(MODULE_DIR . DIRECTORY_SEPARATOR . $moduleName);
+                $this->moduleName = $dirInfo->isDir() ? $moduleName : null;
+            }
+        }
+
+        return $this->moduleName;
+    }
+
+    /**
      * Retorna a senha descrita no "userinfo" da URL
      * @return string
      */
-    function getPass()
+    public function getPass()
     {
         return $this->pass;
     }
@@ -150,7 +278,7 @@ class URLParser
      * Retorna o path (caminho após o domínio) completo
      * @return string
      */
-    function getPath()
+    public function getPath()
     {
         return $this->path;
     }
@@ -159,7 +287,7 @@ class URLParser
      * Retorna a porta descrita na URL
      * @return int
      */
-    function getPort()
+    public function getPort()
     {
         return $this->port;
     }
@@ -168,9 +296,23 @@ class URLParser
      * Retorna um array associativo com os dados da query string
      * @return array
      */
-    function getQuery()
+    public function getQuery()
     {
         return $this->query;
+    }
+
+    /**
+     * Obtém o pedaço do path relativo ao recurso da aplicação que está sendo 
+     * solicitado, ou seja, o que vem depois do authority/host/porta, do
+     * subdiretório no qual a aplicação está instalada e do front controller.
+     * @return string
+     */
+    public function getResourcePath()
+    {
+        if (empty($this->resourcePath)) {
+            $this->setResourcePath();
+        }
+        return $this->resourcePath;
     }
 
     /**
@@ -184,87 +326,151 @@ class URLParser
 
     /**
      * Retorna o subdiretório no qual está instalada a aplicação
+     * Obs.: o subdiretório não é um path completo, e sim o caminho a partir do 
+     * document root. Desta forma, ele não começa e nem termina com um 
+     * DIRECTORY_SEPARATOR.
      * @return string
      */
-    function getSubPath()
+    public function getSubDirectory()
     {
-        return $this->subPath;
+        return $this->subDirectory;
     }
 
     /**
-     * Obtém o nome de usuário informado na URL
+     * Retorna a URL utilizada para acessar a aplicação
      * @return string
      */
-    function getUser()
+    public function getUrl()
+    {
+        return $this->url;
+    }
+
+    /**
+     * Retorna o nome de usuário informado na URL
+     * @return string
+     */
+    public function getUser()
     {
         return $this->user;
     }
 
     /**
      * Define o "fragment" com o valor que vem após a # na URL
-     * @param string $url
+     * @param string $fragment
      */
-    function setFragment($url)
+    public function setFragment($fragment = null)
     {
-        $this->fragment = parse_url($url, PHP_URL_FRAGMENT);
+        $this->fragment = empty($fragment) ?
+                parse_url($this->getUrl(), PHP_URL_FRAGMENT) :
+                $fragment;
+    }
+
+    /**
+     * Define o caminho para o front controller  a partir da raiz da aplicação
+     * @param string $frontController
+     */
+    public function setFrontController($frontController)
+    {
+        $this->frontController = mb_ereg_replace(
+                preg_quote(DIRECTORY_SEPARATOR), '/', $frontController);
     }
 
     /**
      * Define o hostname a partir da URL
-     * @param string $url
+     * @param string $host
      */
-    public function setHost($url)
+    public function setHost($host = null)
     {
-        $this->host = parse_url($url, PHP_URL_HOST);
+        $this->host = empty($host) ?
+                parse_url($this->getUrl(), PHP_URL_HOST) :
+                $host;
     }
 
     /**
      * Define o "password" a partir do "userinfo" da URL
-     * @param string $url
+     * @param string $pass
      */
-    function setPass($url)
+    public function setPass($pass = null)
     {
-        $this->pass = parse_url($url, PHP_URL_PASS);
+        $this->pass = empty($pass) ?
+                parse_url($this->getUrl(), PHP_URL_PASS) :
+                $pass;
     }
 
     /**
      * Define o path a partir da URL
-     * @param string $url
+     * @param string $path
      */
-    function setPath($url)
+    public function setPath($path = null)
     {
-        $this->path = parse_url($url, PHP_URL_PATH);
+        $this->path = empty($path) ?
+                parse_url($this->getUrl(), PHP_URL_PATH) :
+                $path;
     }
 
     /**
      * Define a porta a partir do "authority" da URL
-     * @param string $url
+     * @param int $port
      */
-    function setPort($url)
+    public function setPort($port = null)
     {
-        $port = parse_url($url, PHP_URL_PORT);
-        $this->port = !empty($port) ? (int) $port : null;
+        $this->port = empty($port) ?
+                parse_url($this->getUrl(), PHP_URL_PORT) :
+                $port;
     }
 
     /**
      * Obtém a query string da URL e a converte para um array associativo
-     * @param string $url
+     * @param array $query
      */
-    function setQuery($url)
+    public function setQuery($query = null)
     {
-        $queryString = parse_url($url, PHP_URL_QUERY);
-        if (!empty($queryString)) {
-            parse_str($queryString, $this->query);
+        if (empty($query)) {
+            $queryString = parse_url($this->getUrl(), PHP_URL_QUERY);
+            if (!empty($queryString)) {
+                parse_str($queryString, $this->query);
+            }
+        } else if (is_array($query)) {
+            $this->query = $query;
         }
     }
 
     /**
-     * Define o "scheme" a partir da URL
-     * @param strig $url
+     * Define o resource path
+     * @param string $resourcePath
      */
-    function setScheme($url)
+    public function setResourcePath($resourcePath = null)
     {
-        $this->scheme = parse_url($url, PHP_URL_SCHEME);
+        if (empty($resourcePath)) {
+            $resourcePath = mb_ereg_match('^/.*/$', $this->getPath()) ?
+                    mb_substr($this->getPath(), 1, -1) :
+                    mb_substr($this->getPath(), 1);
+
+            /* Remove o subpath se o mesmo existir */
+            if (mb_strlen($this->getSubDirectory()) > 0) {
+                $resourcePath = mb_substr(
+                        $resourcePath, mb_strlen(mb_ereg_replace(preg_quote(DIRECTORY_SEPARATOR), '/', $this->getSubDirectory())) + 1
+                );
+            }
+            /* Remove o front controller se o mesmo existir */
+            if (mb_ereg_match('.*' . preg_quote($this->getFrontController()), $resourcePath) === true) {
+                $resourcePath = mb_substr(
+                        $resourcePath, mb_strlen($this->getFrontController()) + 1);
+            }
+        }
+
+        $this->resourcePath = empty($resourcePath) ? null : $resourcePath;
+    }
+
+    /**
+     * Define o "scheme" a partir da URL
+     * @param strig $scheme
+     */
+    public function setScheme($scheme = null)
+    {
+        $this->scheme = empty($scheme) ?
+                parse_url($this->getUrl(), PHP_URL_SCHEME) :
+                $scheme;
     }
 
     /**
@@ -285,21 +491,25 @@ class URLParser
      * eliminanos problemas de diretórios e controllers/modules com 
      * o mesmo nome).
      * 
-     * @param string $url
+     * @param string $subPath
      */
-    function setSubPath($url)
+    public function setSubDirectory($subPath = null)
     {
+        if (!empty($subPath)) {
+            $this->subDirectory = mb_ereg_replace(
+                    '/', DIRECTORY_SEPARATOR, $subPath);
+            return;
+        }
+
         if (is_null($this->getPath())) {
             return;
         }
 
-        if (mb_ereg('public/index.php', $this->getPath())) {
-            $this->subPath = mb_ereg_replace(
-                    '/', DIRECTORY_SEPARATOR, mb_substr(
-                            $this->getPath(), 1, mb_strpos(
-                                    $this->getPath(), 'public/index.php') - 2
-                    )
-            );
+        if (mb_ereg($this->frontController, $this->getPath())) {
+            $fcPos = mb_strpos($this->getPath(), $this->frontController);
+            $this->subDirectory = $fcPos > 1 ?
+                    mb_ereg_replace('/', DIRECTORY_SEPARATOR, mb_substr($this->getPath(), 1, $fcPos - 2)) :
+                    null;
             return;
         }
 
@@ -310,38 +520,58 @@ class URLParser
         }
 
         $documentRoot = filter_input(INPUT_SERVER, 'DOCUMENT_ROOT');
-        $this->subPath = DIRECTORY_SEPARATOR;
+        $this->subDirectory = DIRECTORY_SEPARATOR;
         foreach ($pathExplodido as $subdiretorio) {
             $dirInfo = new SplFileInfo(
-                    $documentRoot . $this->subPath . $subdiretorio);
+                    $documentRoot . $this->subDirectory . $subdiretorio);
             if ($dirInfo->isDir() === false) {
                 break;
             }
 
             $frontControllerInfo = new SplFileInfo(
                     $dirInfo->getPathname() . DIRECTORY_SEPARATOR . $this->frontController);
-            $this->subPath .= $subdiretorio . DIRECTORY_SEPARATOR;
+            $this->subDirectory .= $subdiretorio . DIRECTORY_SEPARATOR;
             if ($frontControllerInfo->isFile()) {
                 break;
             }
         }
 
         $frontControllerInfo = new SplFileInfo(
-                $documentRoot . $this->subPath . $this->frontController);
-        $this->subPath = $frontControllerInfo->isFile() ?
-                mb_substr(mb_ereg_replace('/', DIRECTORY_SEPARATOR, $this->subPath), 1, -1) :
+                $documentRoot . $this->subDirectory . $this->frontController);
+        $this->subDirectory = $frontControllerInfo->isFile() ?
+                mb_substr(mb_ereg_replace('/', DIRECTORY_SEPARATOR, $this->subDirectory), 1, -1) :
                 null;
     }
 
-    /* Troca os separadores da URL por separadores de diretório do SO */
+    /**
+     * Define a URL que será parseada. Se nenhum valor for informado,
+     * o método tenta montar a URL a partir de $_SERVER com a sintaxe 
+     * <scheme name> : <hierarchical part> [ ? <query> ] [ # <fragment> ]
+     * 
+     * @param string $url
+     * @link http://tools.ietf.org/html/std66 Descrição da sintaxe genérica de um URI
+     */
+    public function setUrl($url = null)
+    {
+        if (empty($url)) {
+            $scheme = filter_input(INPUT_SERVER, 'REQUEST_SCHEME');
+            $host = filter_input(INPUT_SERVER, 'HTTP_HOST');
+            $uri = filter_input(INPUT_SERVER, 'REQUEST_URI');
+            $url = "{$scheme}://{$host}{$uri}";
+        }
+
+        $this->url = $url;
+    }
 
     /**
      * Define o usuário a partir do "userinfo" da URL
-     * @param string $url
+     * @param string $user
      */
-    function setUser($url)
+    public function setUser($user = null)
     {
-        $this->user = parse_url($url, PHP_URL_USER);
+        $this->user = empty($user) ?
+                parse_url($this->getUrl(), PHP_URL_USER) :
+                $user;
     }
 
 }
