@@ -1,0 +1,31 @@
+{
+    "name": "p13/core",
+    "type": "library",
+    "version": "3.0",
+    "description": "P13 Framework, mais um microframework (só que mais tosco)",
+    "keywords": ["p13", "microframework", "php", "php5"],
+    "license": "LGPL-3.0",
+    "authors": [
+        {
+            "name": "Wagner Sicca",
+            "email": "wssicca@gmail.com",
+            "role": "developer"
+        }
+    ],
+    "support": {
+        "e-mail": "wssicca@gmail.com"
+    },
+    "autoload": {
+        "psr-4": {
+            "p13\\": "src/"
+        }
+    },
+    "require": {
+        "php": ">=6",
+        "smarty/smarty": "*",
+        "phpmailer/phpmailer": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "*"
+    }
+}
