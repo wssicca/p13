@@ -21,6 +21,8 @@
         }
     },
     "require": {
+        "p13/datetime": "dev-master",
+        "p13/url": "dev-master",
         "doctrine/orm": "*",
         "smarty/smarty": "*",
         "phpmailer/phpmailer": "*",
@@ -28,5 +30,15 @@
     },
     "require-dev": {
         "phpunit/phpunit": "*"
-    }
+    },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "git@github.com:wssicca/p13.datetime.git"
+        },
+        {
+            "type": "vcs",
+            "url": "git@github.com:wssicca/p13.url.git"
+        }
+    ]
 }
