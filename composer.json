@@ -34,11 +34,11 @@
     "repositories": [
         {
             "type": "vcs",
-            "url": "git@github.com:wssicca/p13.datetime.git"
+            "url": "git@github.com:wssicca/p13.url.git"
         },
         {
             "type": "vcs",
-            "url": "git@github.com:wssicca/p13.url.git"
+            "url": "git@github.com:wssicca/p13.datetime.git"
         }
     ]
 }
