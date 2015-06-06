@@ -21,7 +21,6 @@
         }
     },
     "require": {
-        "php": ">=5.2",
         "smarty/smarty": "*",
         "phpmailer/phpmailer": "*"
     },
