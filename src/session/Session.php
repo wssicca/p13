@@ -9,7 +9,7 @@
  * file that was distributed with this source code.
  */
 
-namespace p13\core;
+namespace p13\core\session;
 
 use p13\core\exception\SessionException;
 
@@ -18,8 +18,8 @@ use p13\core\exception\SessionException;
  * a funções nativas de acesso à sessão
  *
  * @author Wagner Sicca <wssicca@gmail.com>
- * @namespace p13\core
- * @package p13\core
+ * @namespace p13\core\session
+ * @package p13\core\session
  */
 final class Session
 {
