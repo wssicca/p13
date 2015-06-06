@@ -21,8 +21,10 @@
         }
     },
     "require": {
+        "doctrine/orm": "*",
         "smarty/smarty": "*",
-        "phpmailer/phpmailer": "*"
+        "phpmailer/phpmailer": "*",
+        "psr/http-message": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "*"
