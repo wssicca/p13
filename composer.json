@@ -21,8 +21,8 @@
         }
     },
     "require": {
-        "p13/datetime": "1.0",
-        "p13/url": "1.0",
+        "p13/datetime": "*",
+        "p13/url": "*",
         "doctrine/orm": "*",
         "smarty/smarty": "*",
         "phpmailer/phpmailer": "*",
